@@ -18,7 +18,7 @@ pub struct PathData {
 
 impl<'a> PathData {
     pub async fn upload(&self, client: &Client) {
-        let url = "https://10.100.20.25/api/v1/media/";
+        let url = env::var("API_URL").expect("API_URL must be set");
 
 
         let buffer_clone = Arc::clone(&self.file_buffer).to_vec();
