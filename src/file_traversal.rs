@@ -6,9 +6,15 @@ use std::sync::Arc;
 use reqwest::Client;
 use tokio::sync::Semaphore;
 use tokio::task;
+use crate::config::Config;
 use crate::path_data::PathData;
 
-pub(crate) async fn iterate_over_files_and_upload(path: &str, hashes_from_db: Vec<String>, client: Arc<Client>) {
+pub(crate) async fn iterate_over_files_and_upload(
+    path: &str,
+    hashes_from_db: Vec<String>,
+    client: Arc<Client>,
+    config: Config,
+) {
     let root = path;
     let paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
     let total_paths = paths.len();
@@ -17,8 +23,8 @@ pub(crate) async fn iterate_over_files_and_upload(path: &str, hashes_from_db: Ve
     let hashes_from_db = Arc::new(hashes_from_db);
 
     // Set the number of concurrent tasks
-    let concurrency_limit = 6;
-    let semaphore = Arc::new(Semaphore::new(concurrency_limit));
+    let concurrency_limit = config.number_of_threads;
+    let semaphore = Arc::new(Semaphore::new(concurrency_limit as usize));
 
     let mut tasks = Vec::new();
 
