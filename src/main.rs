@@ -7,7 +7,6 @@ use crate::db::create_database_pool;
 mod path_data;
 mod file_traversal;
 mod db;
-mod uploader;
 mod api;
 
 #[tokio::main]
