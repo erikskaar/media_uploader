@@ -30,16 +30,18 @@ pub(crate) async fn iterate_over_files_and_upload(path: &str, hashes_from_db: Ve
 
         let task = task::spawn(async move {
             let permit = semaphore.acquire().await.unwrap();
-            let data = read_file(path.to_str().unwrap(), &root);
-            if let Ok(data) = data {
-                if !hashes_from_db.contains(&data.md5) {
+            let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
+            println!("{}", partial_hash);
+            if !hashes_from_db.contains(&partial_hash) {
+                let data = read_file(path.to_str().unwrap(), &root);
+                if let Ok(data) = data {
                     println!("File {}/{}: Uploading", index + 1, total_paths);
                     data.upload(&client).await;
-                } else {
-                    println!("File {}/{}: Skipping", index + 1, total_paths);
                 }
+            } else {
+                println!("File {}/{}: Skipping", index + 1, total_paths);
             }
-            drop(permit); // Release the permit
+            drop(permit);
         });
 
         tasks.push(task);
@@ -131,4 +133,12 @@ pub fn get_file_buffer(path: &str) -> Result<Vec<u8>, io::Error> {
     let mut buffer = Vec::new();
     let _ = file.read_to_end(&mut buffer);
     return Ok(buffer);
+}
+
+pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
+    let file = File::open(path)?;
+    let mut buffer = Vec::new();
+    const MAX_SIZE: usize = 200 * 1024 * 1024; // 200 MB in bytes
+    file.take(MAX_SIZE as u64).read_to_end(&mut buffer)?;
+    return compute_md5_hash(&buffer);
 }
