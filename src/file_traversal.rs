@@ -22,7 +22,7 @@ pub(crate) async fn iterate_over_files_and_upload(path: &str, hashes_from_db: Ve
 
     let mut tasks = Vec::new();
 
-    for (index, path) in paths.clone().into_iter().enumerate() {
+    for (index, path) in paths.into_iter().enumerate() {
         let client = client.clone();
         let hashes_from_db = hashes_from_db.clone();
         let root = root.to_string();
@@ -49,7 +49,6 @@ pub(crate) async fn iterate_over_files_and_upload(path: &str, hashes_from_db: Ve
         let _ = task.await; // Handle or ignore the result/error here
     }
 }
-
 
 pub(crate) fn read_file(path: &str, root: &str) -> Result<PathData, std::fmt::Error> {
     // Set default acceptable usernames
