@@ -29,6 +29,7 @@ pub(crate) async fn iterate_over_files_and_upload(
     let mut tasks = Vec::new();
 
     for (index, path) in paths.into_iter().enumerate() {
+        let acceptable_users = config.accepted_users.clone();
         let client = client.clone();
         let hashes_from_db = hashes_from_db.clone();
         let root = root.to_string();
@@ -37,15 +38,14 @@ pub(crate) async fn iterate_over_files_and_upload(
         let task = task::spawn(async move {
             let permit = semaphore.acquire().await.unwrap();
             let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
-            println!("{}", partial_hash);
             if !hashes_from_db.contains(&partial_hash) {
-                let data = read_file(path.to_str().unwrap(), &root);
+                let data = read_file(path.to_str().unwrap(), &root, acceptable_users);
                 if let Ok(data) = data {
                     println!("File {}/{}: Uploading", index + 1, total_paths);
                     data.upload(&client).await;
                 }
             } else {
-                println!("File {}/{}: Skipping", index + 1, total_paths);
+                println!("File {}/{}: Skipping: {:?}", index + 1, total_paths, path.to_str().unwrap());
             }
             drop(permit);
         });
@@ -58,9 +58,7 @@ pub(crate) async fn iterate_over_files_and_upload(
     }
 }
 
-pub(crate) fn read_file(path: &str, root: &str) -> Result<PathData, std::fmt::Error> {
-    // Set default acceptable usernames
-    let acceptable_usernames: [String; 2] = [String::from("Erik"), String::from("Lasse")];
+pub(crate) fn read_file(path: &str, root: &str, acceptable_users: Vec<String>) -> Result<PathData, std::fmt::Error> {
 
     // Split out the root
     let relative_path: String = path
@@ -76,14 +74,14 @@ pub(crate) fn read_file(path: &str, root: &str) -> Result<PathData, std::fmt::Er
 
     let absolute_path = path.to_owned();
     let filename = mutable_relative_path.pop().unwrap().to_owned();
-    let mut username: String;
+    let mut username: &str;
     // If the file is in the root folder set it to default
     if mutable_relative_path.len() == 0 {
-        username = String::from("Default_Uploader");
+        username = "Default_Uploader";
     } else {
-        username = mutable_relative_path.remove(0).to_owned();
-        if !acceptable_usernames.contains(&username) {
-            username = String::from("Default_Uploader");
+        username = mutable_relative_path.remove(0);
+        if !acceptable_users.contains(&username.to_string()) {
+            username = "Default_Uploader";
         }
     }
     let tags: Vec<String> = mutable_relative_path.iter().map(|x| x.to_lowercase()).collect();
@@ -91,7 +89,8 @@ pub(crate) fn read_file(path: &str, root: &str) -> Result<PathData, std::fmt::Er
     let file_buffer = Arc::new(file_buffer);
     let md5 = compute_md5_hash(&file_buffer).unwrap();
 
-    // println!("Successfully read file into memory: {}", path);
+    let username = username.to_owned();
+
     return Ok(PathData {
         absolute_path,
         relative_path,
