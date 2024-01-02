@@ -20,7 +20,6 @@ impl<'a> PathData {
     pub async fn upload(&self, client: &Client) {
         let url = env::var("API_URL").expect("API_URL must be set");
 
-
         let buffer_clone = Arc::clone(&self.file_buffer).to_vec();
         let stream = stream::once(async move {
             Ok::<Bytes, std::io::Error>(Bytes::from(buffer_clone))
