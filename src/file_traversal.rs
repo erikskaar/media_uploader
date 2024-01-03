@@ -39,10 +39,11 @@ pub(crate) async fn iterate_over_files_and_upload(
             let permit = semaphore.acquire().await.unwrap();
             let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
             if !hashes_from_db.contains(&partial_hash) {
+                println!("File {}/{}: Unknown hash found: {:?}", index + 1, total_paths, path.to_str().unwrap());
                 let data = read_file(path.to_str().unwrap(), &root, acceptable_users);
                 if let Ok(data) = data {
-                    println!("File {}/{}: Uploading", index + 1, total_paths);
-                    data.upload(&client).await;
+                    println!("File {}/{}: Uploading: {:?}", index + 1, total_paths, path.to_str().unwrap());
+                    data.upload(&client, index, total_paths).await;
                 }
             } else {
                 println!("File {}/{}: Skipping: {:?}", index + 1, total_paths, path.to_str().unwrap());
@@ -91,7 +92,6 @@ pub(crate) fn read_file(
     let tags: Vec<String> = mutable_relative_path.iter().map(|x| x.to_lowercase()).collect();
     let file_buffer = get_file_buffer(path).unwrap();
     let file_buffer = Arc::new(file_buffer);
-    let md5 = compute_md5_hash(&file_buffer).unwrap();
 
     let username = username.to_owned();
 
@@ -101,7 +101,6 @@ pub(crate) fn read_file(
         filename,
         username,
         tags,
-        md5,
         file_buffer,
     })
 }

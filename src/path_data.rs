@@ -2,6 +2,7 @@ use std::env;
 use std::ops::Add;
 use reqwest::{Body, Client, multipart};
 use std::sync::Arc;
+use colored::Colorize;
 use futures::{stream};
 use tokio_util::bytes::Bytes;
 
@@ -12,12 +13,11 @@ pub struct PathData {
     pub filename: String,
     pub(crate) username: String,
     pub tags: Vec<String>,
-    pub md5: String,
     pub file_buffer: Arc<Vec<u8>>,
 }
 
 impl<'a> PathData {
-    pub async fn upload(&self, client: &Client) {
+    pub async fn upload(&self, client: &Client, index: usize, total_paths: usize) {
         let url = env::var("API_URL").expect("API_URL must be set");
 
         let buffer_clone = Arc::clone(&self.file_buffer).to_vec();
@@ -49,7 +49,6 @@ impl<'a> PathData {
         let password = env::var(password)
             .expect("Password not in env file");
 
-        println!("Uploading: {}", self.absolute_path);
         match client
             .post(url)
             .basic_auth(&self.username, Some(password))
@@ -58,9 +57,9 @@ impl<'a> PathData {
             .await {
             Ok(response) => {
                 if response.status() == 201 {
-                    println!("Uploaded, {}", self.absolute_path);
+                    println!("File: {}/{}: Uploaded: {}", index, total_paths, self.absolute_path.green());
                 } else {
-                    println!("Should have uploaded {}, but did not get a 201. Response: {}", self.absolute_path, response.status())
+                    println!("Should have uploaded {}, but did not get a 201. Response: {}", self.absolute_path, response.status().as_str().red())
                 }
             }
             Err(error) => {
