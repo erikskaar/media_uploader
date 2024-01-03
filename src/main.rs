@@ -22,7 +22,7 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let config = config::read_config(&&args.config).unwrap();
+    let config = config::read_config(&args.config).unwrap();
     dotenv().ok();
     let root = env::var("ROOT_FOLDER").expect("ROOT_FOLDER must be set");
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");

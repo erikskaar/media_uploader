@@ -19,7 +19,7 @@ pub async fn get_hashes_from_db(pool: Pool<Postgres>) -> Result<Vec<String>, Err
         .fetch_all(&pool).await {
         Ok(rows) => {
             let rows: Vec<String> = rows.into_iter()
-                .filter_map(|x| Option::from(x.0))
+                .filter_map(|x| x.0)
                 .collect();
             println!("Successfully retrieved hashes from db");
             return Ok(rows);

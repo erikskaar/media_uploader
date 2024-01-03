@@ -11,5 +11,5 @@ pub struct Config {
 pub fn read_config(path: &str) -> serde_yaml::Result<Config> {
     let contents = fs::read_to_string(path)
         .expect("Something went wrong reading the file");
-    return from_str::<Config>(&contents)
+    from_str::<Config>(&contents)
 }

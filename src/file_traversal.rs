@@ -58,14 +58,18 @@ pub(crate) async fn iterate_over_files_and_upload(
     }
 }
 
-pub(crate) fn read_file(path: &str, root: &str, acceptable_users: Vec<String>) -> Result<PathData, std::fmt::Error> {
+pub(crate) fn read_file(
+    path: &str,
+    root: &str,
+    acceptable_users: Vec<String>,
+) -> Result<PathData, std::fmt::Error> {
 
     // Split out the root
     let relative_path: String = path
         .split(root)
-        .filter(|x| !x.is_empty())
-        .next()
-        .unwrap().to_owned();
+        .find(|x| !x.is_empty())
+        .unwrap()
+        .to_owned();
 
     // create mutable copy to pop out different parts
     let mut mutable_relative_path: Vec<&str> = relative_path
@@ -76,7 +80,7 @@ pub(crate) fn read_file(path: &str, root: &str, acceptable_users: Vec<String>) -
     let filename = mutable_relative_path.pop().unwrap().to_owned();
     let mut username: &str;
     // If the file is in the root folder set it to default
-    if mutable_relative_path.len() == 0 {
+    if mutable_relative_path.is_empty() {
         username = "Default_Uploader";
     } else {
         username = mutable_relative_path.remove(0);
@@ -91,7 +95,7 @@ pub(crate) fn read_file(path: &str, root: &str, acceptable_users: Vec<String>) -
 
     let username = username.to_owned();
 
-    return Ok(PathData {
+    Ok(PathData {
         absolute_path,
         relative_path,
         filename,
@@ -99,7 +103,7 @@ pub(crate) fn read_file(path: &str, root: &str, acceptable_users: Vec<String>) -
         tags,
         md5,
         file_buffer,
-    });
+    })
 }
 
 pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
@@ -129,7 +133,7 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
 
 pub fn compute_md5_hash(buffer: &Vec<u8>) -> io::Result<String> {
     let digest = md5::compute(buffer);
-    return Ok(format!("{:x}", digest));
+    Ok(format!("{:x}", digest))
 }
 
 pub fn get_file_buffer(path: &str) -> Result<Vec<u8>, io::Error> {
@@ -137,7 +141,7 @@ pub fn get_file_buffer(path: &str) -> Result<Vec<u8>, io::Error> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();
     let _ = file.read_to_end(&mut buffer);
-    return Ok(buffer);
+    Ok(buffer)
 }
 
 pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
@@ -145,5 +149,5 @@ pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
     let mut buffer = Vec::new();
     const MAX_SIZE: usize = 200 * 1024 * 1024; // 200 MB in bytes
     file.take(MAX_SIZE as u64).read_to_end(&mut buffer)?;
-    return compute_md5_hash(&buffer);
+    compute_md5_hash(&buffer)
 }
