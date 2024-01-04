@@ -57,9 +57,9 @@ impl<'a> PathData {
             .await {
             Ok(response) => {
                 if response.status() == 201 {
-                    println!("File: {}/{}: Uploaded: {}", index, total_paths, self.absolute_path.green());
+                    println!("{}/{}:\t Uploaded\t {}", index, total_paths, self.absolute_path.green());
                 } else {
-                    println!("Should have uploaded {}, but did not get a 201. Response: {}", self.absolute_path, response.status().as_str().red())
+                    println!("{}/{}:\t Failed\t {} Response {}",index, total_paths, self.absolute_path, response.status().as_str().red())
                 }
             }
             Err(error) => {
