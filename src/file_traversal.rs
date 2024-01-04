@@ -39,14 +39,14 @@ pub(crate) async fn iterate_over_files_and_upload(
             let permit = semaphore.acquire().await.unwrap();
             let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
             if !hashes_from_db.contains(&partial_hash) {
-                println!("\t{}/{}:\t Reading\t {:?}", index + 1, total_paths, path.to_str().unwrap());
+                println!("\t{}/{}:\t Reading\t {}", index + 1, total_paths, path.to_str().unwrap());
                 let data = read_file(path.to_str().unwrap(), &root, acceptable_users);
                 if let Ok(data) = data {
-                    println!("\t{}/{}:\t Uploading\t {:?}", index + 1, total_paths, path.to_str().unwrap());
+                    println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
                     data.upload(&client, index + 1, total_paths).await;
                 }
             } else {
-                println!("\t{}/{}:\t Skipping\t {:?}", index + 1, total_paths, path.to_str().unwrap());
+                println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path.to_str().unwrap());
             }
             drop(permit);
         });
