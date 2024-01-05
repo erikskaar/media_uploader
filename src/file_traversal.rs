@@ -74,7 +74,7 @@ pub(crate) async fn iterate_over_files_and_upload(
 pub(crate) fn read_file(
     path: &str,
     root: &str,
-    acceptable_users: &Vec<String>,
+    acceptable_users: &[String],
 ) -> Result<PathData, std::fmt::Error> {
 
     // Split out the root
@@ -173,9 +173,8 @@ pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
 
     // Combine the chunk and file size for the final hash
     let mut buffer = chunk;
-    buffer.extend_from_slice(&file_size_bytes);
-    let result = compute_md5_hash(&buffer).unwrap();
-    println!("Total MD5: {:?} {:?}", path, result);
+    buffer.extend_from_slice(file_size_bytes);
 
+    let result = compute_md5_hash(&buffer).unwrap();
     Ok(result)
 }
