@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use colored::Colorize;
 use sqlx::{Error, Pool, Postgres};
 use sqlx::postgres::PgPoolOptions;
@@ -15,18 +16,28 @@ pub async fn create_database_pool(database_url: &str) -> Result<Pool<Postgres>, 
     }
 }
 
-pub async fn get_hashes_from_db(pool: Pool<Postgres>) -> Result<Vec<String>, Error> {
-    match sqlx::query_as::<_, (Option<String>, )>("SELECT md5sum from files_media")
+pub async fn get_file_details_from_db(pool: Pool<Postgres>) -> Result<HashMap<u64, Vec<String>>, Error> {
+    let mut file_details = HashMap::new();
+
+    match sqlx::query_as::<_, (Option<String>, Option<String>)>("SELECT size, md5sum from files_media")
         .fetch_all(&pool).await {
         Ok(rows) => {
-            let rows: Vec<String> = rows.into_iter()
-                .filter_map(|x| x.0)
-                .collect();
-            println!("{}", "Successfully retrieved hashes from db".green());
-            return Ok(rows);
+            for (size, hash) in rows {
+                if let (Some(size_str), Some(hash)) = (size, hash) {
+                    if let Ok(size) = size_str.parse::<u64>() {
+                        file_details.entry(size).or_insert_with(Vec::new).push(hash);
+                    }
+                }
+            }
+            println!("{}", "Successfully retrieved file metadata from db".green());
+            Ok(file_details)
         }
-        Err(e) => println!("{} {}", "Failed to get hashes from db:".red(), e),
+        Err(e) => {
+            println!("{} {}", "Failed to get file metadata from db:".red(), e);
+            Err(e)
+        }
     }
-    Ok(vec![])
 }
+
+
 
