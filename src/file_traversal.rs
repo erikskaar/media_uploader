@@ -44,7 +44,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                 let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
                 if let Ok(data) = data {
                     println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
-                    // data.upload(&client, index + 1, total_paths).await;
+                    data.upload(&client, index + 1, total_paths).await;
                     drop(permit);
                 }
             } else {
@@ -53,7 +53,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                     let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
                     if let Ok(data) = data {
                         println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
-                        // data.upload(&client, index + 1, total_paths).await;
+                        data.upload(&client, index + 1, total_paths).await;
                         drop(permit);
                     }
                 } else {
