@@ -1,8 +1,9 @@
 use std::fs::{File, read_dir};
 use std::{io};
-use std::io::Read;
+use std::collections::HashMap;
+use std::io::{Read};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc};
 use reqwest::Client;
 use tokio::sync::Semaphore;
 use tokio::task;
@@ -11,7 +12,7 @@ use crate::path_data::PathData;
 
 pub(crate) async fn iterate_over_files_and_upload(
     path: &str,
-    hashes_from_db: Vec<String>,
+    file_metadata_from_db: HashMap<u64, Vec<String>>,
     client: Arc<Client>,
     config: Config,
 ) {
@@ -20,7 +21,7 @@ pub(crate) async fn iterate_over_files_and_upload(
     let total_paths = paths.len();
 
     // Wrap hashes in Arc for shared access
-    let hashes_from_db = Arc::new(hashes_from_db);
+    let file_metadata_from_db = Arc::new(file_metadata_from_db);
 
     // Set the number of concurrent tasks
     let concurrency_limit = config.number_of_threads;
@@ -31,24 +32,35 @@ pub(crate) async fn iterate_over_files_and_upload(
     for (index, path) in paths.into_iter().enumerate() {
         let acceptable_users = config.accepted_users.clone();
         let client = client.clone();
-        let hashes_from_db = hashes_from_db.clone();
+        let file_metadata_from_db = file_metadata_from_db.clone();
         let root = root.to_string();
         let semaphore = semaphore.clone();
 
         let task = task::spawn(async move {
             let permit = semaphore.acquire().await.unwrap();
-            let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
-            if !hashes_from_db.contains(&partial_hash) {
-                println!("\t{}/{}:\t Reading\t {}", index + 1, total_paths, path.to_str().unwrap());
-                let data = read_file(path.to_str().unwrap(), &root, acceptable_users);
+            let file_size = get_file_size(&path).unwrap();
+
+            if !file_metadata_from_db.contains_key(&file_size) {
+                let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
                 if let Ok(data) = data {
                     println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
                     data.upload(&client, index + 1, total_paths).await;
+                    drop(permit);
                 }
             } else {
-                println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path.to_str().unwrap());
+                let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
+                if !file_metadata_from_db.get(&file_size).unwrap().contains(&partial_hash) {
+                    let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
+                    if let Ok(data) = data {
+                        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
+                        data.upload(&client, index + 1, total_paths).await;
+                        drop(permit);
+                    }
+                } else {
+                    println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path.to_str().unwrap());
+                    drop(permit);
+                }
             }
-            drop(permit);
         });
 
         tasks.push(task);
@@ -62,7 +74,7 @@ pub(crate) async fn iterate_over_files_and_upload(
 pub(crate) fn read_file(
     path: &str,
     root: &str,
-    acceptable_users: Vec<String>,
+    acceptable_users: &[String],
 ) -> Result<PathData, std::fmt::Error> {
 
     // Split out the root
@@ -143,10 +155,26 @@ pub fn get_file_buffer(path: &str) -> Result<Vec<u8>, io::Error> {
     Ok(buffer)
 }
 
-pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
+pub fn get_file_size(path: &Path) -> io::Result<u64> {
     let file = File::open(path)?;
-    let mut buffer = Vec::new();
-    const MAX_SIZE: usize = 200 * 1024 * 1024; // 200 MB in bytes
-    file.take(MAX_SIZE as u64).read_to_end(&mut buffer)?;
-    compute_md5_hash(&buffer)
+    Ok(file.metadata()?.len())
+}
+
+pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
+    const CHUNK_SIZE: usize = 128 * 1024; // 128 KB in bytes
+    let mut file = File::open(path)?;
+
+    // Read the first 128KB
+    let mut chunk = vec![0; CHUNK_SIZE];
+    file.read_exact(&mut chunk)?;
+    let file_size = file.metadata()?.len();
+    let file_size_str = file_size.to_string(); // required to match other languages
+    let file_size_bytes = file_size_str.as_bytes();
+
+    // Combine the chunk and file size for the final hash
+    let mut buffer = chunk;
+    buffer.extend_from_slice(file_size_bytes);
+
+    let result = compute_md5_hash(&buffer).unwrap();
+    Ok(result)
 }
