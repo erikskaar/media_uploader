@@ -41,6 +41,7 @@ pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
     Ok(result)
 }
 
+#[derive(Debug, PartialEq)]
 pub enum FileExtension {
     Mp4,
     Avi,
@@ -88,5 +89,28 @@ impl FileExtension {
             Wmv => "video/x-ms-wmv",
             Unknown => ""
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_extension() {
+        let path = Path::new("video.mP4");
+        assert_eq!(FileExtension::from(path), Mp4);
+    }
+
+    #[test]
+    fn test_unknown_extension() {
+        let path = Path::new("file.xyz");
+        assert_eq!(FileExtension::from(path), Unknown);
+    }
+
+    #[test]
+    fn test_no_extension() {
+        let path = Path::new("video.");
+        assert_eq!(FileExtension::from(path), Unknown);
     }
 }

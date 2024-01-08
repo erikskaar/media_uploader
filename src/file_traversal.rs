@@ -196,5 +196,3 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
     }
     Ok(file_paths)
 }
-
-assert_eq!(true, true);
