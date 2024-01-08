@@ -1,8 +1,7 @@
 use std::env;
 use std::ops::Add;
-use reqwest::{Body, Client, multipart};
+use reqwest::{Body, Client, Error, multipart, Response};
 use std::sync::Arc;
-use colored::Colorize;
 use futures::{stream};
 use tokio_util::bytes::Bytes;
 
@@ -13,11 +12,12 @@ pub struct PathData {
     pub filename: String,
     pub(crate) username: String,
     pub tags: Vec<String>,
+    pub mime_type: String,
     pub file_buffer: Arc<Vec<u8>>,
 }
 
 impl<'a> PathData {
-    pub async fn upload(&self, client: &Client, index: usize, total_paths: usize) {
+    pub async fn upload(&self, client: &Client) -> Result<Response, Error> {
         let url = env::var("API_URL").expect("API_URL must be set");
 
         let buffer_clone = Arc::clone(&self.file_buffer).to_vec();
@@ -27,21 +27,20 @@ impl<'a> PathData {
 
         let body = Body::wrap_stream(stream);
 
-        let file_part = multipart::Part::stream(body)
+        let file_part = match multipart::Part::stream(body)
             .file_name(self.filename.clone())
-            .mime_str("video/mp4");
-
-        match file_part {
-            Ok(ref _part) => {}
+            .mime_str("video/mp4") {
+            Ok(part) => part,
             Err(ref e) => {
                 println!("Error creating file part: {:?}", e);
+                panic!()
             }
-        }
+        };
 
         let description = self.tags.join(",");
 
         let form = multipart::Form::new()
-            .part("media_file", file_part.unwrap())
+            .part("media_file", file_part)
             .text("title", self.filename.clone())
             .text("description", description);
 
@@ -49,22 +48,11 @@ impl<'a> PathData {
         let password = env::var(password)
             .expect("Password not in env file");
 
-        match client
+        client
             .post(url)
             .basic_auth(&self.username, Some(password))
             .multipart(form)
             .send()
-            .await {
-            Ok(response) => {
-                if response.status() == 201 {
-                    println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, self.absolute_path.green());
-                } else {
-                    println!("\t{}/{}:\t Failed  \t {}\t Response {}",index, total_paths, self.absolute_path, response.status().as_str().red())
-                }
-            }
-            Err(error) => {
-                println!("Error: {:?}", error);
-            }
-        }
+            .await
     }
 }

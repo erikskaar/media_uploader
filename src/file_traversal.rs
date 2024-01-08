@@ -1,13 +1,14 @@
-use std::fs::{File, read_dir};
+use std::fs::{read_dir};
 use std::{io};
 use std::collections::HashMap;
-use std::io::{Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc};
-use reqwest::Client;
-use tokio::sync::Semaphore;
+use colored::Colorize;
+use reqwest::{Client};
+use tokio::sync::{Semaphore};
 use tokio::task;
 use crate::config::Config;
+use crate::file_utils::{compute_hash_of_partial_file, FileExtension, get_file_buffer, get_file_size};
 use crate::path_data::PathData;
 
 pub(crate) async fn iterate_over_files_and_upload(
@@ -37,27 +38,79 @@ pub(crate) async fn iterate_over_files_and_upload(
         let semaphore = semaphore.clone();
 
         let task = task::spawn(async move {
-            let permit = semaphore.acquire().await.unwrap();
-            let file_size = get_file_size(&path).unwrap();
+            let permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    println!("Could not acquire permit. Try limiting number_of_threads.");
+                    panic!()
+                }
+            };
+
+            let file_size = match get_file_size(&path) {
+                Ok(size) => size,
+                Err(error) => {
+                    println!("Could not get size of file {:?}. Reason: {}", path, error);
+                    panic!()
+                }
+            };
+
+            let path_str = match path.to_str() {
+                Some(path_str) => path_str,
+                None => {
+                    println!("Could not get string slice from path {:?}", path);
+                    panic!()
+                }
+            };
+
+            let path_slice: &Path = path.as_path();
 
             if !file_metadata_from_db.contains_key(&file_size) {
-                let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
+                let data = read_file(path_str, &root, &acceptable_users);
                 if let Ok(data) = data {
-                    println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
-                    data.upload(&client, index + 1, total_paths).await;
+                    println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
+                    match data.upload(&client).await {
+                        Ok(response) => {
+                            if response.status() == 201 {
+                                println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
+                            } else {
+                                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
+                            }
+                        }
+                        Err(error) => {
+                            println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
+                        }
+                    };
                     drop(permit);
                 }
             } else {
-                let partial_hash = compute_hash_of_partial_file(path.as_path()).unwrap();
+                let partial_hash = match compute_hash_of_partial_file(path_slice) {
+                    Ok(hash) => hash,
+                    Err(error) => {
+                        println!("Could not get partial hash of file, {:?}. Reason: {}", path_slice, error);
+                        panic!()
+                    }
+                };
+
                 if !file_metadata_from_db.get(&file_size).unwrap().contains(&partial_hash) {
-                    let data = read_file(path.to_str().unwrap(), &root, &acceptable_users);
+                    let data = read_file(path_str, &root, &acceptable_users);
                     if let Ok(data) = data {
-                        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path.to_str().unwrap());
-                        data.upload(&client, index + 1, total_paths).await;
+                        match data.upload(&client).await {
+                            Ok(response) => {
+                                if response.status() == 201 {
+                                    println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
+                                } else {
+                                    println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
+                                }
+                            }
+                            Err(error) => {
+                                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
+                            }
+                        };
+                        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
                         drop(permit);
                     }
                 } else {
-                    println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path.to_str().unwrap());
+                    println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path_str);
                     drop(permit);
                 }
             }
@@ -107,12 +160,16 @@ pub(crate) fn read_file(
 
     let username = username.to_owned();
 
+    let extension = FileExtension::from(Path::new(path));
+    let mime_type = extension.mime_type().to_string();
+
     Ok(PathData {
         absolute_path,
         relative_path,
         filename,
         username,
         tags,
+        mime_type,
         file_buffer,
     })
 }
@@ -126,13 +183,11 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
         let current_path = entry.path();
 
         if current_path.is_file() {
-            if current_path
-                .as_path()
-                .to_str()
-                .unwrap()
-                .to_lowercase()
-                .ends_with(".mp4") {
-                file_paths.push(current_path);
+            match FileExtension::from(&current_path) {
+                FileExtension::Unknown => {}
+                _ => {
+                    file_paths.push(current_path)
+                }
             }
         } else if current_path.is_dir() {
             let mut sub_files = get_files_in_directory(current_path.as_path().to_str().unwrap().trim())?;
@@ -142,39 +197,4 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
     Ok(file_paths)
 }
 
-pub fn compute_md5_hash(buffer: &Vec<u8>) -> io::Result<String> {
-    let digest = md5::compute(buffer);
-    Ok(format!("{:x}", digest))
-}
-
-pub fn get_file_buffer(path: &str) -> Result<Vec<u8>, io::Error> {
-    let path = Path::new(path);
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    let _ = file.read_to_end(&mut buffer);
-    Ok(buffer)
-}
-
-pub fn get_file_size(path: &Path) -> io::Result<u64> {
-    let file = File::open(path)?;
-    Ok(file.metadata()?.len())
-}
-
-pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
-    const CHUNK_SIZE: usize = 128 * 1024; // 128 KB in bytes
-    let mut file = File::open(path)?;
-
-    // Read the first 128KB
-    let mut chunk = vec![0; CHUNK_SIZE];
-    file.read_exact(&mut chunk)?;
-    let file_size = file.metadata()?.len();
-    let file_size_str = file_size.to_string(); // required to match other languages
-    let file_size_bytes = file_size_str.as_bytes();
-
-    // Combine the chunk and file size for the final hash
-    let mut buffer = chunk;
-    buffer.extend_from_slice(file_size_bytes);
-
-    let result = compute_md5_hash(&buffer).unwrap();
-    Ok(result)
-}
+assert_eq!(true, true);
