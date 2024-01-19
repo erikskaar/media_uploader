@@ -25,8 +25,8 @@ pub(crate) async fn iterate_over_files_and_upload(
     let file_metadata_from_db = Arc::new(file_metadata_from_db);
 
     // Set the number of concurrent tasks
-    let concurrency_limit = config.number_of_threads;
-    let semaphore = Arc::new(Semaphore::new(concurrency_limit as usize));
+    let concurrency_limit: usize = config.number_of_threads as usize;
+    let semaphore = Arc::new(Semaphore::new(concurrency_limit));
 
     let mut tasks = Vec::new();
 
