@@ -15,7 +15,7 @@ duplicates.
 
 As this program does not hash files in the same way default MediaCMS does, it will require pruning all files from
 MediaCMS to work correctly. To match the hashes, and make the tags work, `files/models.py` in MediaCMS does have to be
-updated. The changed file is available in `mediacms_files_changed/models.py`, and it can be diffed against the original
+updated. The changed file is available in `mediacms_files_changed/models.py.new`, and it can be diffed against the original
 found [here](https://github.com/mediacms-io/mediacms/blob/main/files/models.py) to see what changes are required.
 
 This program requires the MediaCMS database to be exposed to wherever you host this from. This is for checking the
