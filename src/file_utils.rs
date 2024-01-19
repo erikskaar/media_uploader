@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::path::{Path};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use crate::file_utils::FileExtension::{Avi, Mov, Mp4, Mpeg, Ogv, Unknown, Webm, Wmv};
 
 pub fn compute_md5_hash(buffer: &Vec<u8>) -> io::Result<String> {
@@ -39,6 +40,17 @@ pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
 
     let result = compute_md5_hash(&buffer).unwrap();
     Ok(result)
+}
+
+pub fn check_file_integrity(path: &PathBuf) -> bool {
+    let output = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg(path)
+        .output()
+        .expect("Failed to verify file integrity.");
+
+    output.status.success()
 }
 
 #[derive(Debug, PartialEq)]

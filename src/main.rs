@@ -1,4 +1,5 @@
-use std::env;
+use std::collections::HashMap;
+use std::{env, process};
 use std::sync::Arc;
 use dotenv::dotenv;
 use crate::api::{create_client};
@@ -18,6 +19,10 @@ struct Args {
     /// Path to config YML
     #[arg(short, long)]
     config: String,
+
+    /// True for testing, not fetching anything from db. Will still try to upload files.
+    #[arg(short, long, default_value_t=true)]
+    dry: bool,
 }
 
 #[tokio::main]
@@ -27,18 +32,22 @@ async fn main() {
     dotenv().ok();
     let root = env::var("ROOT_FOLDER").expect("ROOT_FOLDER must be set");
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pool = create_database_pool(&database_url).await.unwrap();
-
-    let file_metadata_from_db = match db::get_file_details_from_db(pool).await {
-        Ok(metadata) => {
-            println!("Successfully mapped {} files from database", metadata.values().len());
-            metadata
+    let file_metadata_from_db = if !args.dry {
+        let pool = create_database_pool(&database_url).await.unwrap();
+        match db::get_file_details_from_db(pool).await {
+            Ok(metadata) => {
+                println!("Successfully mapped {} files from database", metadata.values().len());
+                metadata
+            }
+            Err(error) => {
+                println!("Could not get rows from database. Reason:, {}", error);
+                process::exit(1)
+            }
         }
-        Err(error) => {
-            println!("Could not get rows from database. Reason:, {}", error);
-            panic!()
-        }
+    } else {
+        HashMap::new()
     };
+
 
     let client = create_client();
 

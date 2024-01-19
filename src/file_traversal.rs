@@ -8,6 +8,7 @@ use reqwest::{Client};
 use tokio::sync::{Semaphore};
 use tokio::task;
 use crate::config::Config;
+use crate::file_utils;
 use crate::file_utils::{compute_hash_of_partial_file, FileExtension, get_file_buffer, get_file_size};
 use crate::path_data::PathData;
 
@@ -65,22 +66,14 @@ pub(crate) async fn iterate_over_files_and_upload(
             let path_slice: &Path = path.as_path();
 
             if !file_metadata_from_db.contains_key(&file_size) {
-                let data = read_file(path_str, &root, &acceptable_users);
-                if let Ok(data) = data {
-                    println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
-                    match data.upload(&client).await {
-                        Ok(response) => {
-                            if response.status() == 201 {
-                                println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
-                            } else {
-                                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
-                            }
-                        }
-                        Err(error) => {
-                            println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
-                        }
-                    };
-                    drop(permit);
+                match file_utils::check_file_integrity(&path) {
+                    true => {
+                        let data = read_file(path_str, &root, &acceptable_users);
+                        upload_file(data, &client, index, total_paths, path_str).await
+                    }
+                    false => {
+                        println!("\t{}/{}:\t Failed  \t {}\t {}", index, total_paths, path_str, "Corrupt file".red())
+                    }
                 }
             } else {
                 let partial_hash = match compute_hash_of_partial_file(path_slice) {
@@ -92,28 +85,20 @@ pub(crate) async fn iterate_over_files_and_upload(
                 };
 
                 if !file_metadata_from_db.get(&file_size).unwrap().contains(&partial_hash) {
-                    let data = read_file(path_str, &root, &acceptable_users);
-                    if let Ok(data) = data {
-                        match data.upload(&client).await {
-                            Ok(response) => {
-                                if response.status() == 201 {
-                                    println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
-                                } else {
-                                    println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
-                                }
-                            }
-                            Err(error) => {
-                                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
-                            }
-                        };
-                        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
-                        drop(permit);
+                    match file_utils::check_file_integrity(&path) {
+                        true => {
+                            let data = read_file(path_str, &root, &acceptable_users);
+                            upload_file(data, &client, index, total_paths, path_str).await
+                        }
+                        false => {
+                            println!("\t{}/{}:\t Failed  \t {}\t {}", index, total_paths, path_str, "Corrupt file".red())
+                        }
                     }
                 } else {
                     println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path_str);
-                    drop(permit);
                 }
             }
+            drop(permit);
         });
 
         tasks.push(task);
@@ -195,4 +180,28 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
         }
     }
     Ok(file_paths)
+}
+
+pub async fn upload_file(
+    data: Result<PathData, core::fmt::Error>,
+    client: &Client,
+    index: usize,
+    total_paths: usize,
+    path_str: &str,
+) {
+    if let Ok(data) = data {
+        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
+        match data.upload(client).await {
+            Ok(response) => {
+                if response.status() == 201 {
+                    println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
+                } else {
+                    println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
+                }
+            }
+            Err(error) => {
+                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
+            }
+        };
+    }
 }
