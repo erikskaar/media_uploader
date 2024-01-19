@@ -30,7 +30,7 @@ pub fn compute_hash_of_partial_file(path: &Path) -> io::Result<String> {
     let mut chunk = vec![0; CHUNK_SIZE];
     file.read_exact(&mut chunk)?;
     let file_size = file.metadata()?.len();
-    let file_size_str = file_size.to_string(); // required to match other languages
+    let file_size_str = file_size.to_string(); // required to match MediaCMS' Python implementation
     let file_size_bytes = file_size_str.as_bytes();
 
     // Combine the chunk and file size for the final hash
