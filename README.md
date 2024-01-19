@@ -9,6 +9,7 @@ duplicates.
 - Automatically upload with the correct user
 - Set tags based on which folders the files are located in
 - Fast duplicate check
+- Corrupted file check
 
 ## Requirements
 
@@ -87,5 +88,4 @@ The environment file does require a few variables to be set:
 - Change from passwords to tokens.
 - Allow for changing default uploader user through `config.yml`.
 - Allow for the program to run continuously, uploading new files as they are added to the media directory.
-- Corrupt file check
 - Updating the console output and adding logging
