@@ -28,8 +28,8 @@ A user named `Default Uploader` must be created in MediaCMS.
 
 Building can be done using `cargo build --release`. If you want
 to build for a linux installation you should build using `cargo build --release --target x86_64-unknown-linux-gnu`.
-Please note that if you are attempting to build it on a mounted volume, you will have to run the build commands in
-an un-mounted volume before you move them onto the mounted one.
+Please note that if you are attempting to build it on a mounted network volume, you will have to run the build commands in
+an local volume before you move them onto the network one.
 
 To run the program, make sure you are in the same folder as the `media_uploader` binary and then run `
 ./media_uploader --config config.yml`. It should be able to find the `config.yml` and `.env` file if the binary is
