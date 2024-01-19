@@ -3,6 +3,7 @@ use std::{io};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use colored::Colorize;
 use reqwest::{Client};
 use tokio::sync::{Semaphore};
@@ -30,22 +31,19 @@ pub(crate) async fn iterate_over_files_and_upload(
     let semaphore = Arc::new(Semaphore::new(concurrency_limit));
 
     let mut tasks = Vec::new();
+    let counter = Arc::new(AtomicUsize::new(1));
 
-    for (index, path) in paths.into_iter().enumerate() {
+    for path in paths.into_iter() {
         let acceptable_users = config.accepted_users.clone();
         let client = client.clone();
         let file_metadata_from_db = file_metadata_from_db.clone();
         let root = root.to_string();
         let semaphore = semaphore.clone();
+        let counter = counter.clone();
 
         let task = task::spawn(async move {
-            let permit = match semaphore.acquire().await {
-                Ok(permit) => permit,
-                Err(_) => {
-                    println!("Could not acquire permit. Try limiting number_of_threads.");
-                    panic!()
-                }
-            };
+            let _permit = semaphore.acquire().await.unwrap();
+            let completed = counter.fetch_add(1, Ordering::SeqCst);
 
             let file_size = match get_file_size(&path) {
                 Ok(size) => size,
@@ -69,10 +67,10 @@ pub(crate) async fn iterate_over_files_and_upload(
                 match file_utils::check_file_integrity(&path) {
                     true => {
                         let data = read_file(path_str, &root, &acceptable_users);
-                        upload_file(data, &client, index, total_paths, path_str).await
+                        upload_file(data, &client, &completed, total_paths, path_str).await
                     }
                     false => {
-                        println!("\t{}/{}:\t Failed  \t {}\t {}", index, total_paths, path_str, "Corrupt file".red())
+                        println!("\t{}/{}:\t Failed  \t {}\t {}", completed, total_paths, path_str, "Corrupt file".red())
                     }
                 }
             } else {
@@ -88,19 +86,17 @@ pub(crate) async fn iterate_over_files_and_upload(
                     match file_utils::check_file_integrity(&path) {
                         true => {
                             let data = read_file(path_str, &root, &acceptable_users);
-                            upload_file(data, &client, index, total_paths, path_str).await
+                            upload_file(data, &client, &completed, total_paths, path_str).await
                         }
                         false => {
-                            println!("\t{}/{}:\t Failed  \t {}\t {}", index, total_paths, path_str, "Corrupt file".red())
+                            println!("\t{:?}/{}:\t Failed  \t {}\t {}", counter, total_paths, path_str, "Corrupt file".red())
                         }
                     }
                 } else {
-                    println!("\t{}/{}:\t Skipping\t {}", index + 1, total_paths, path_str);
+                    println!("\t{:?}/{}:\t Skipping\t {}", counter, total_paths, path_str);
                 }
             }
-            drop(permit);
         });
-
         tasks.push(task);
     }
 
@@ -185,22 +181,22 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
 pub async fn upload_file(
     data: Result<PathData, core::fmt::Error>,
     client: &Client,
-    index: usize,
+    index: &usize,
     total_paths: usize,
     path_str: &str,
 ) {
     if let Ok(data) = data {
-        println!("\t{}/{}:\t Uploading\t {}", index + 1, total_paths, path_str);
+        println!("\t{:?}/{}:\t Uploading\t {}", index, total_paths, path_str);
         match data.upload(client).await {
             Ok(response) => {
                 if response.status() == 201 {
-                    println!("\t{}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
+                    println!("\t{:?}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
                 } else {
-                    println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
+                    println!("\t{:?}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
                 }
             }
             Err(error) => {
-                println!("\t{}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
+                println!("\t{:?}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
             }
         };
     }
