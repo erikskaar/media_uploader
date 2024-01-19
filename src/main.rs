@@ -21,7 +21,7 @@ struct Args {
     config: String,
 
     /// True for testing, not fetching anything from db. Will still try to upload files.
-    #[arg(short, long, default_value_t=true)]
+    #[arg(short, long, default_value_t=false)]
     dry: bool,
 }
 
