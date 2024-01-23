@@ -1,10 +1,18 @@
 use std::collections::HashMap;
 use std::{env, process};
-use std::sync::Arc;
+use std::io::{stdout, Write};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use dotenv::dotenv;
 use crate::api::{create_client};
 use crate::db::create_database_pool;
 use clap::Parser;
+use crossterm::{
+    terminal::{Clear, ClearType},
+    cursor::MoveTo,
+    ExecutableCommand,
+};
+use crate::shared_state::SharedState;
 
 mod path_data;
 mod file_traversal;
@@ -12,6 +20,7 @@ mod db;
 mod api;
 mod config;
 mod file_utils;
+mod shared_state;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -21,9 +30,10 @@ struct Args {
     config: String,
 
     /// True for testing, not fetching anything from db. Will still try to upload files.
-    #[arg(short, long, default_value_t=false)]
+    #[arg(short, long, default_value_t = false)]
     dry: bool,
 }
+
 
 #[tokio::main]
 async fn main() {
@@ -47,9 +57,62 @@ async fn main() {
     } else {
         HashMap::new()
     };
-
+    let shared_state = Arc::new(Mutex::new(SharedState {
+        uploaded_files: 0,
+        corrupt_files: 0,
+        remaining_files: i32::MAX,  // example number
+        failed_files: 0,
+        skipped_files: 0,
+        last_started_files: vec![],
+        currently_uploading: vec![],
+    }));
 
     let client = create_client();
 
-    file_traversal::iterate_over_files_and_upload(&root, file_metadata_from_db, Arc::new(client), config).await;
+    let shared_state_clone = shared_state.clone();
+
+    tokio::spawn(async move {
+        file_traversal::iterate_over_files_and_upload(
+            &root,
+            file_metadata_from_db,
+            Arc::new(client),
+            config,
+            &shared_state_clone,
+        ).await;
+    });
+
+    let mut stdout = stdout();
+
+    let start_time = Instant::now();
+
+    loop {
+        let elapsed = start_time.elapsed();
+        let hours = elapsed.as_secs() / 3600;
+        let minutes = (elapsed.as_secs() % 3600) / 60;
+        let seconds = elapsed.as_secs() % 60;
+
+        // Clear the screen and reset cursor position
+        stdout.execute(Clear(ClearType::All)).unwrap();
+        stdout.execute(MoveTo(0, 0)).unwrap();
+
+        // Lock the shared state only long enough to read or copy its data
+        let should_break = {
+            let state = shared_state.lock().unwrap();
+            println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
+            state.print_status();
+            state.remaining_files == 0
+        };
+
+        // Flush the output to ensure it's displayed
+        stdout.flush().unwrap();
+
+        // Break out of the loop if processing is complete
+        if should_break {
+            break;
+        }
+
+        // Sleep outside of the locked state scope
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
 }
