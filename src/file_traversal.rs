@@ -16,7 +16,7 @@ pub(crate) async fn iterate_over_files_and_upload(
     file_metadata_from_db: HashMap<u64, Vec<String>>,
     client: Arc<Client>,
     config: Config,
-    shared_state: &Arc<Mutex<SharedState>>
+    shared_state: &Arc<Mutex<SharedState>>,
 ) {
     let root = path;
     let paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
@@ -63,7 +63,6 @@ pub(crate) async fn iterate_over_files_and_upload(
             let path_slice: &Path = path.as_path();
 
             if !file_metadata_from_db.contains_key(&file_size) {
-                shared_clone.lock().unwrap().append_to_started_files(path.clone());
                 match file_utils::check_file_integrity(&path) {
                     true => {
                         shared_clone.lock().unwrap().append_to_currently_uploading(path.to_str().unwrap().to_string());
@@ -72,6 +71,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                     }
                     false => {
                         shared_clone.lock().unwrap().increment_corrupt_files();
+                        shared_clone.lock().unwrap().append_to_started_files(path.to_str().unwrap().to_string());
                     }
                 }
             } else {
@@ -94,7 +94,8 @@ pub(crate) async fn iterate_over_files_and_upload(
                         }
                     }
                 } else {
-                   shared_clone.lock().unwrap().increment_skipped_files();
+                    shared_clone.lock().unwrap().increment_skipped_files();
+                    shared_clone.lock().unwrap().append_to_started_files(path.to_str().unwrap().to_string());
                 }
             }
         });
@@ -183,7 +184,7 @@ pub async fn upload_file(
     data: Result<PathData, core::fmt::Error>,
     client: &Client,
     path_str: &str,
-    shared_state: Arc<Mutex<SharedState>>
+    shared_state: Arc<Mutex<SharedState>>,
 ) {
     if let Ok(data) = data {
         match data.upload(client).await {
@@ -199,5 +200,6 @@ pub async fn upload_file(
             }
         };
         shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
+        shared_state.lock().unwrap().append_to_started_files(path_str.to_string());
     }
 }

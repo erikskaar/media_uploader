@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use tokio::time::Instant;
 
 pub struct SharedState {
@@ -7,7 +6,7 @@ pub struct SharedState {
     pub(crate) remaining_files: i32,
     pub(crate) failed_files: i32,
     pub(crate) skipped_files: i32,
-    pub(crate) last_started_files: Vec<PathBuf>,
+    pub(crate) last_started_files: Vec<String>,
     pub(crate) currently_uploading: Vec<(String, Instant)>
 }
 
@@ -34,8 +33,8 @@ impl SharedState {
         self.remaining_files -= 1;
     }
 
-    pub(crate) fn append_to_started_files(&mut self, path: PathBuf) {
-        self.last_started_files.push(path.clone());
+    pub(crate) fn append_to_started_files(&mut self, path: String) {
+        self.last_started_files.push(path);
         if self.last_started_files.len() > 20 {
             self.last_started_files.remove(0);
         }
@@ -53,7 +52,7 @@ impl SharedState {
         let index = self
             .currently_uploading
             .iter()
-            .position(|(x,_)| x.to_owned() == path)
+            .position(|(x,_)| *x == path)
             .unwrap();
         self.currently_uploading.remove(index);
     }
@@ -63,8 +62,10 @@ impl SharedState {
 
         for (path, start_time) in self.currently_uploading.clone().iter().rev() {
             let elapsed = start_time.elapsed();
+            let hours = elapsed.as_secs() / 3600;
+            let minutes = (elapsed.as_secs() % 3600) / 60;
             let seconds = elapsed.as_secs() % 60;
-            println!("{}: {}s", path, seconds)
+            println!("{}: {:02}:{:02}:{:02}", path, hours, minutes, seconds)
         }
 
         println!("\nUploaded files: {}, Corrupt files: {}, Failed files: {}, Skipped files: {}, Remaining files: {}\n",
@@ -76,7 +77,7 @@ impl SharedState {
         );
         println!("Latest processed files:");
         for path in self.last_started_files.clone().iter().rev() {
-            println!("{}", path.to_str().unwrap())
+            println!("{}", path)
         }
     }
 }
