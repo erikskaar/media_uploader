@@ -1,3 +1,4 @@
+use crossterm::style::Stylize;
 use tokio::time::Instant;
 use crate::upload_status::UploadStatus;
 
@@ -108,7 +109,10 @@ impl SharedState {
 
         println!("Latest processed files:");
         for (step, path) in self.last_processed_files.clone().iter().rev() {
-            println!("{}  \t {}", step, path)
+            match step {
+                UploadStatus::Failed(_) => println!("{} {}  \t {}", "FAILED -".red(), step, path),
+                _ => println!("{}  \t {}", step, path)
+            }
         }
 
         println!("\nCorrupted files:");
@@ -117,8 +121,8 @@ impl SharedState {
         }
 
         println!("\nFailed files:");
-        for (_, path) in self.failed_files.clone().iter().rev() {
-            println!("\t\t {}", path)
+        for (status_code, path) in self.failed_files.clone().iter().rev() {
+            println!("{}  \t {}", status_code, path)
         }
     }
 }
