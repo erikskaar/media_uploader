@@ -4,31 +4,29 @@ use crate::upload_status::UploadStatus;
 pub struct SharedState {
     pub(crate) files_retrieved: usize,
     pub(crate) uploaded_files: i32,
-    pub(crate) corrupt_files: i32,
+    pub(crate) corrupt_files_counter: i32,
     pub(crate) remaining_files: i32,
-    pub(crate) failed_files: i32,
+    pub(crate) failed_files_counter: i32,
     pub(crate) skipped_files: i32,
     pub(crate) last_processed_files: Vec<(UploadStatus, String)>,
     pub(crate) currently_uploading: Vec<(Instant, String)>,
+    pub(crate) corrupt_files: Vec<(UploadStatus, String)>,
+    pub(crate) failed_files: Vec<(UploadStatus, String)>,
 }
 
 impl SharedState {
-    pub(crate) fn increment_uploaded_files(&mut self) {
+    fn increment_uploaded_files(&mut self) {
         self.uploaded_files += 1;
-        self.decrement_remaining_files();
     }
-    pub(crate) fn increment_corrupt_files(&mut self) {
-        self.corrupt_files += 1;
-        self.decrement_remaining_files();
+    fn increment_corrupt_files(&mut self) {
+        self.corrupt_files_counter += 1;
     }
-    pub(crate) fn increment_failed_files(&mut self) {
-        self.failed_files += 1;
-        self.decrement_remaining_files();
+    fn increment_failed_files(&mut self) {
+        self.failed_files_counter += 1;
     }
 
-    pub(crate) fn increment_skipped_files(&mut self) {
+    fn increment_skipped_files(&mut self) {
         self.skipped_files += 1;
-        self.decrement_remaining_files();
     }
 
     fn decrement_remaining_files(&mut self) {
@@ -36,10 +34,25 @@ impl SharedState {
     }
 
     pub(crate) fn append_to_processed_files(&mut self, content: (UploadStatus, String)) {
-        self.last_processed_files.push(content);
+        self.last_processed_files.push(content.clone());
         if self.last_processed_files.len() > 20 {
             self.last_processed_files.remove(0);
         }
+        match &content.0 {
+            UploadStatus::Skipped => {
+                self.increment_skipped_files()
+            }
+            UploadStatus::Failed(reason) => {
+                self.append_to_failed_files(content.clone().1, *reason)
+            }
+            UploadStatus::Corrupt => {
+                self.append_to_corrupt_files(content.clone().1)
+            }
+            UploadStatus::Success => {
+                self.increment_uploaded_files()
+            }
+        }
+        self.decrement_remaining_files();
     }
 
     pub(crate) fn set_initial_remaining_files(&mut self, number: i32) {
@@ -48,6 +61,16 @@ impl SharedState {
 
     pub(crate) fn append_to_currently_uploading(&mut self, path: String) {
         self.currently_uploading.push((Instant::now(), path))
+    }
+
+    pub(crate) fn append_to_corrupt_files(&mut self, path: String) {
+        self.corrupt_files.push((UploadStatus::Corrupt, path));
+        self.increment_corrupt_files();
+    }
+
+    pub(crate) fn append_to_failed_files(&mut self, path: String, status_code: u16) {
+        self.failed_files.push((UploadStatus::Failed(status_code), path));
+        self.increment_failed_files();
     }
 
     pub(crate) fn set_files_retrieved(&mut self, amount: usize) {
@@ -77,14 +100,25 @@ impl SharedState {
 
         println!("\nUploaded files: {}, Corrupt files: {}, Failed files: {}, Skipped files: {}, Remaining files: {}\n",
                  self.uploaded_files,
-                 self.corrupt_files,
-                 self.failed_files,
+                 self.corrupt_files_counter,
+                 self.failed_files_counter,
                  self.skipped_files,
                  self.remaining_files
         );
+
         println!("Latest processed files:");
         for (step, path) in self.last_processed_files.clone().iter().rev() {
             println!("{}  \t {}", step, path)
+        }
+
+        println!("\nCorrupted files:");
+        for (_, path) in self.corrupt_files.clone().iter().rev() {
+            println!("\t\t {}", path)
+        }
+
+        println!("\nFailed files:");
+        for (_, path) in self.failed_files.clone().iter().rev() {
+            println!("\t\t {}", path)
         }
     }
 }

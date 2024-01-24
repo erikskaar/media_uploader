@@ -72,7 +72,6 @@ pub(crate) async fn iterate_over_files_and_upload(
                         upload_file(data, &client, path_str, shared_clone).await;
                     }
                     false => {
-                        shared_clone.lock().unwrap().increment_corrupt_files();
                         shared_clone.lock().unwrap().append_to_processed_files((UploadStatus::Corrupt, path.to_str().unwrap().to_string()));
                     }
                 }
@@ -92,11 +91,10 @@ pub(crate) async fn iterate_over_files_and_upload(
                             upload_file(data, &client, path_str, shared_clone).await
                         }
                         false => {
-                            shared_clone.lock().unwrap().increment_corrupt_files();
+                            shared_clone.lock().unwrap().append_to_processed_files((UploadStatus::Corrupt, path.to_str().unwrap().to_string()));
                         }
                     }
                 } else {
-                    shared_clone.lock().unwrap().increment_skipped_files();
                     shared_clone
                         .lock()
                         .unwrap()
@@ -195,13 +193,11 @@ pub async fn upload_file(
         match data.upload(client).await {
             Ok(response) => {
                 if response.status() == 201 {
-                    shared_state.lock().unwrap().increment_uploaded_files();
                     shared_state
                         .lock()
                         .unwrap()
                         .append_to_processed_files((UploadStatus::Success, path_str.to_string()));
                 } else {
-                    shared_state.lock().unwrap().increment_failed_files();
                     shared_state
                         .lock()
                         .unwrap()
@@ -209,7 +205,6 @@ pub async fn upload_file(
                 }
             }
             Err(error) => {
-                shared_state.lock().unwrap().increment_failed_files();
                 shared_state
                     .lock()
                     .unwrap()

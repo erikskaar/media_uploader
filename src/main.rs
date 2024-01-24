@@ -62,12 +62,14 @@ async fn main() {
     let shared_state = Arc::new(Mutex::new(SharedState {
         files_retrieved: 0,
         uploaded_files: 0,
-        corrupt_files: 0,
+        corrupt_files_counter: 0,
         remaining_files: i32::MAX,  // example number
-        failed_files: 0,
+        failed_files_counter: 0,
         skipped_files: 0,
         last_processed_files: vec![],
         currently_uploading: vec![],
+        corrupt_files: vec![],
+        failed_files: vec![],
     }));
     shared_state.lock().unwrap().set_files_retrieved(file_metadata_from_db.values().len());
 
