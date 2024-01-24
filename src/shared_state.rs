@@ -2,6 +2,7 @@ use tokio::time::Instant;
 use crate::upload_status::UploadStatus;
 
 pub struct SharedState {
+    pub(crate) files_retrieved: usize,
     pub(crate) uploaded_files: i32,
     pub(crate) corrupt_files: i32,
     pub(crate) remaining_files: i32,
@@ -49,6 +50,10 @@ impl SharedState {
         self.currently_uploading.push((path, Instant::now()))
     }
 
+    pub(crate) fn set_files_retrieved(&mut self, amount: usize) {
+        self.files_retrieved = amount;
+    }
+
     pub(crate) fn remove_from_currently_uploading(&mut self, path: String) {
         let index = self
             .currently_uploading
@@ -59,6 +64,7 @@ impl SharedState {
     }
 
     pub(crate) fn print_status(&self) {
+        println!("Files in database: {}", self.files_retrieved);
         println!("Currently uploading:");
 
         for (path, start_time) in self.currently_uploading.clone().iter().rev() {

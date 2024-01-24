@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use dotenv::dotenv;
 use crate::api::{create_client};
-use crate::db::create_database_pool;
+use crate::db::{create_database_pool};
 use clap::Parser;
 use crossterm::{
     terminal::{Clear, ClearType},
@@ -48,7 +48,6 @@ async fn main() {
         let pool = create_database_pool(&database_url).await.unwrap();
         match db::get_file_details_from_db(pool).await {
             Ok(metadata) => {
-                println!("Successfully mapped {} files from database", metadata.values().len());
                 metadata
             }
             Err(error) => {
@@ -59,7 +58,9 @@ async fn main() {
     } else {
         HashMap::new()
     };
+
     let shared_state = Arc::new(Mutex::new(SharedState {
+        files_retrieved: 0,
         uploaded_files: 0,
         corrupt_files: 0,
         remaining_files: i32::MAX,  // example number
@@ -68,6 +69,7 @@ async fn main() {
         last_processed_files: vec![],
         currently_uploading: vec![],
     }));
+    shared_state.lock().unwrap().set_files_retrieved(file_metadata_from_db.values().len());
 
     let client = create_client();
 
@@ -93,11 +95,9 @@ async fn main() {
         let minutes = (elapsed.as_secs() % 3600) / 60;
         let seconds = elapsed.as_secs() % 60;
 
-        // Clear the screen and reset cursor position
         stdout.execute(Clear(ClearType::All)).unwrap();
         stdout.execute(MoveTo(0, 0)).unwrap();
 
-        // Lock the shared state only long enough to read or copy its data
         let should_break = {
             let state = shared_state.lock().unwrap();
             println!("Runtime: {:02}:{:02}:{:02}\n", hours, minutes, seconds);
@@ -105,16 +105,12 @@ async fn main() {
             state.remaining_files == 0
         };
 
-        // Flush the output to ensure it's displayed
         stdout.flush().unwrap();
 
-        // Break out of the loop if processing is complete
         if should_break {
             break;
         }
 
-        // Sleep outside of the locked state scope
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
-
 }
