@@ -71,7 +71,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                     }
                     false => {
                         shared_clone.lock().unwrap().increment_corrupt_files();
-                        shared_clone.lock().unwrap().append_to_started_files(path.to_str().unwrap().to_string());
+                        shared_clone.lock().unwrap().append_to_started_files((String::from("Corrupt"), path.to_str().unwrap().to_string()));
                     }
                 }
             } else {
@@ -95,7 +95,10 @@ pub(crate) async fn iterate_over_files_and_upload(
                     }
                 } else {
                     shared_clone.lock().unwrap().increment_skipped_files();
-                    shared_clone.lock().unwrap().append_to_started_files(path.to_str().unwrap().to_string());
+                    shared_clone
+                        .lock()
+                        .unwrap()
+                        .append_to_started_files((String::from("Skipped"), path.to_str().unwrap().to_string()));
                 }
             }
         });
@@ -200,6 +203,9 @@ pub async fn upload_file(
             }
         };
         shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
-        shared_state.lock().unwrap().append_to_started_files(path_str.to_string());
+        shared_state
+            .lock()
+            .unwrap()
+            .append_to_started_files((String::from("Uploaded"), path_str.to_string()));
     }
 }

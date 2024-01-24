@@ -63,7 +63,7 @@ async fn main() {
         remaining_files: i32::MAX,  // example number
         failed_files: 0,
         skipped_files: 0,
-        last_started_files: vec![],
+        last_processed_files: vec![],
         currently_uploading: vec![],
     }));
 

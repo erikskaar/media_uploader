@@ -6,7 +6,7 @@ pub struct SharedState {
     pub(crate) remaining_files: i32,
     pub(crate) failed_files: i32,
     pub(crate) skipped_files: i32,
-    pub(crate) last_started_files: Vec<String>,
+    pub(crate) last_processed_files: Vec<(String, String)>,
     pub(crate) currently_uploading: Vec<(String, Instant)>
 }
 
@@ -33,10 +33,10 @@ impl SharedState {
         self.remaining_files -= 1;
     }
 
-    pub(crate) fn append_to_started_files(&mut self, path: String) {
-        self.last_started_files.push(path);
-        if self.last_started_files.len() > 20 {
-            self.last_started_files.remove(0);
+    pub(crate) fn append_to_started_files(&mut self, content: (String, String)) {
+        self.last_processed_files.push(content);
+        if self.last_processed_files.len() > 20 {
+            self.last_processed_files.remove(0);
         }
     }
 
@@ -76,8 +76,8 @@ impl SharedState {
                  self.remaining_files
         );
         println!("Latest processed files:");
-        for path in self.last_started_files.clone().iter().rev() {
-            println!("{}", path)
+        for (step, path) in self.last_processed_files.clone().iter().rev() {
+            println!("{}  \t {}", step, path)
         }
     }
 }
