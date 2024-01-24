@@ -4,7 +4,7 @@ use crossterm::style::{StyledContent, Stylize};
 #[derive(Copy, Clone)]
 pub enum UploadStatus {
     Skipped,
-    Failed,
+    Failed(u16),
     Corrupt,
     Success,
 }
@@ -13,7 +13,7 @@ impl UploadStatus {
     pub fn get_str(self) -> StyledContent<String> {
         match self {
             UploadStatus::Skipped => String::from("SKIPPED").white(),
-            UploadStatus::Failed => String::from("FAILED").red(),
+            UploadStatus::Failed(reason) => String::from(format!("FAILED - {}", reason)).red(),
             UploadStatus::Corrupt => String::from("CORRUPTED").red(),
             UploadStatus::Success => String::from("SUCCESS").green()
         }

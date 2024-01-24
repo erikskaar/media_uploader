@@ -205,15 +205,15 @@ pub async fn upload_file(
                     shared_state
                         .lock()
                         .unwrap()
-                        .append_to_processed_files((UploadStatus::Failed, path_str.to_string()));
+                        .append_to_processed_files((UploadStatus::Failed(response.status().as_u16()), path_str.to_string()));
                 }
             }
-            Err(_error) => {
+            Err(error) => {
                 shared_state.lock().unwrap().increment_failed_files();
                 shared_state
                     .lock()
                     .unwrap()
-                    .append_to_processed_files((UploadStatus::Failed, path_str.to_string()));
+                    .append_to_processed_files((UploadStatus::Failed(error.status().unwrap().as_u16()), path_str.to_string()));
             }
         };
         shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
