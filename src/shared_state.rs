@@ -110,7 +110,7 @@ impl SharedState {
         println!("Latest processed files:");
         for (step, path) in self.last_processed_files.clone().iter().rev() {
             match step {
-                UploadStatus::Failed(_) => println!("{} {}  \t {}", "FAILED -".red(), step, path),
+                UploadStatus::Failed(_) => println!("{} {}\t\t {}", "FAILED -".red(), step, path),
                 _ => println!("{}  \t {}", step, path)
             }
         }
