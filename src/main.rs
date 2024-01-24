@@ -21,6 +21,8 @@ mod api;
 mod config;
 mod file_utils;
 mod shared_state;
+mod upload_status;
+mod file_extension;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -98,7 +100,7 @@ async fn main() {
         // Lock the shared state only long enough to read or copy its data
         let should_break = {
             let state = shared_state.lock().unwrap();
-            println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
+            println!("Runtime: {:02}:{:02}:{:02}\n", hours, minutes, seconds);
             state.print_status();
             state.remaining_files == 0
         };

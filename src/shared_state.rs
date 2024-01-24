@@ -1,4 +1,5 @@
 use tokio::time::Instant;
+use crate::upload_status::UploadStatus;
 
 pub struct SharedState {
     pub(crate) uploaded_files: i32,
@@ -6,7 +7,7 @@ pub struct SharedState {
     pub(crate) remaining_files: i32,
     pub(crate) failed_files: i32,
     pub(crate) skipped_files: i32,
-    pub(crate) last_processed_files: Vec<(String, String)>,
+    pub(crate) last_processed_files: Vec<(UploadStatus, String)>,
     pub(crate) currently_uploading: Vec<(String, Instant)>
 }
 
@@ -33,7 +34,7 @@ impl SharedState {
         self.remaining_files -= 1;
     }
 
-    pub(crate) fn append_to_started_files(&mut self, content: (String, String)) {
+    pub(crate) fn append_to_processed_files(&mut self, content: (UploadStatus, String)) {
         self.last_processed_files.push(content);
         if self.last_processed_files.len() > 20 {
             self.last_processed_files.remove(0);
@@ -65,7 +66,7 @@ impl SharedState {
             let hours = elapsed.as_secs() / 3600;
             let minutes = (elapsed.as_secs() % 3600) / 60;
             let seconds = elapsed.as_secs() % 60;
-            println!("{}: {:02}:{:02}:{:02}", path, hours, minutes, seconds)
+            println!("{:02}:{:02}:{:02}\t {}", hours, minutes, seconds, path)
         }
 
         println!("\nUploaded files: {}, Corrupt files: {}, Failed files: {}, Skipped files: {}, Remaining files: {}\n",

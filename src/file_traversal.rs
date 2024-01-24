@@ -8,8 +8,10 @@ use tokio::sync::{Semaphore};
 use tokio::task;
 use crate::config::Config;
 use crate::{file_utils, SharedState};
-use crate::file_utils::{compute_hash_of_partial_file, FileExtension, get_file_buffer, get_file_size};
+use crate::file_extension::FileExtension;
+use crate::file_utils::{compute_hash_of_partial_file, get_file_buffer, get_file_size};
 use crate::path_data::PathData;
+use crate::upload_status::UploadStatus;
 
 pub(crate) async fn iterate_over_files_and_upload(
     path: &str,
@@ -71,7 +73,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                     }
                     false => {
                         shared_clone.lock().unwrap().increment_corrupt_files();
-                        shared_clone.lock().unwrap().append_to_started_files((String::from("Corrupt"), path.to_str().unwrap().to_string()));
+                        shared_clone.lock().unwrap().append_to_processed_files((UploadStatus::Corrupt, path.to_str().unwrap().to_string()));
                     }
                 }
             } else {
@@ -98,7 +100,7 @@ pub(crate) async fn iterate_over_files_and_upload(
                     shared_clone
                         .lock()
                         .unwrap()
-                        .append_to_started_files((String::from("Skipped"), path.to_str().unwrap().to_string()));
+                        .append_to_processed_files((UploadStatus::Skipped, path.to_str().unwrap().to_string()));
                 }
             }
         });
@@ -194,18 +196,26 @@ pub async fn upload_file(
             Ok(response) => {
                 if response.status() == 201 {
                     shared_state.lock().unwrap().increment_uploaded_files();
+                    shared_state
+                        .lock()
+                        .unwrap()
+                        .append_to_processed_files((UploadStatus::Success, path_str.to_string()));
                 } else {
                     shared_state.lock().unwrap().increment_failed_files();
+                    shared_state
+                        .lock()
+                        .unwrap()
+                        .append_to_processed_files((UploadStatus::Failed, path_str.to_string()));
                 }
             }
             Err(_error) => {
                 shared_state.lock().unwrap().increment_failed_files();
+                shared_state
+                    .lock()
+                    .unwrap()
+                    .append_to_processed_files((UploadStatus::Failed, path_str.to_string()));
             }
         };
         shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
-        shared_state
-            .lock()
-            .unwrap()
-            .append_to_started_files((String::from("Uploaded"), path_str.to_string()));
     }
 }
