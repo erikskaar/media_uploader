@@ -12,6 +12,7 @@ duplicates.
 - Corrupted file check
 - Uploads new files first
 
+
 ## Requirements
 
 As this program does not hash files in the same way default MediaCMS does, it will require pruning all files from
