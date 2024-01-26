@@ -4,6 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use crossterm::style::Stylize;
 use reqwest::Client;
 use crate::path_data::PathData;
 use crate::shared_state::SharedState;
@@ -106,6 +107,7 @@ pub fn get_newest_files(root_folder: &str) -> Vec<PathBuf> {
                 .iter()
                 .map(|x| x.path.clone())
                 .collect();
+            println!("{}", format!("Found {} new file(s) since last run!", extra_files.len()).green());
 
             match tree_node::save_tree_to_file(&new_node, "tree.json") {
                 Ok(_) => println!("Saved tree to file."),
