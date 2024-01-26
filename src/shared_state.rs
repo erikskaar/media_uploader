@@ -111,18 +111,18 @@ impl SharedState {
         for (step, path) in self.last_processed_files.clone().iter().rev() {
             match step {
                 UploadStatus::Failed(_) => println!("{} {}\t\t {}", "FAILED -".red(), step, path),
-                _ => println!("{}  \t {}", step, path)
+                _ => println!("{}  \t\t {}", step, path)
             }
         }
 
         println!("\nCorrupted files:");
         for (_, path) in self.corrupt_files.clone().iter().rev() {
-            println!("\t\t {}", path)
+            println!("\t\t\t {}", path)
         }
 
         println!("\nFailed files:");
         for (status_code, path) in self.failed_files.clone().iter().rev() {
-            println!("{}  \t {}", status_code, path)
+            println!("{}     \t\t {}", status_code, path)
         }
     }
 }

@@ -13,7 +13,7 @@ impl UploadStatus {
     pub fn get_str(self) -> StyledContent<String> {
         match self {
             UploadStatus::Skipped => String::from("SKIPPED").white(),
-            UploadStatus::Failed(reason) => String::from(format!("{}", reason)).red(),
+            UploadStatus::Failed(reason) => format!("{}", reason).red(),
             UploadStatus::Corrupt => String::from("CORRUPTED").red(),
             UploadStatus::Success => String::from("SUCCESS").green()
         }

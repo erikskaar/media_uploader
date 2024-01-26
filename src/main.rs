@@ -12,6 +12,7 @@ use crossterm::{
     cursor::MoveTo,
     ExecutableCommand,
 };
+use crate::file_utils::get_newest_files;
 use crate::shared_state::SharedState;
 
 mod path_data;
@@ -23,6 +24,7 @@ mod file_utils;
 mod shared_state;
 mod upload_status;
 mod file_extension;
+mod tree_node;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -77,6 +79,8 @@ async fn main() {
 
     let shared_state_clone = shared_state.clone();
 
+    let newest_files = get_newest_files(root.as_str());
+
     tokio::spawn(async move {
         file_traversal::iterate_over_files_and_upload(
             &root,
@@ -84,6 +88,7 @@ async fn main() {
             Arc::new(client),
             config,
             &shared_state_clone,
+            newest_files
         ).await;
     });
 
@@ -115,4 +120,5 @@ async fn main() {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
+
 }

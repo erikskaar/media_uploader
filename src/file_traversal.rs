@@ -9,7 +9,7 @@ use tokio::task;
 use crate::config::Config;
 use crate::{file_utils, SharedState};
 use crate::file_extension::FileExtension;
-use crate::file_utils::{compute_hash_of_partial_file, get_file_buffer, get_file_size};
+use crate::file_utils::{compute_hash_of_partial_file, get_file_buffer, get_file_size, upload_file};
 use crate::path_data::PathData;
 use crate::upload_status::UploadStatus;
 
@@ -19,15 +19,24 @@ pub(crate) async fn iterate_over_files_and_upload(
     client: Arc<Client>,
     config: Config,
     shared_state: &Arc<Mutex<SharedState>>,
+    new_file_paths: Vec<PathBuf>
 ) {
     let root = path;
-    let paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
+    let original_paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
+    let mut paths: Vec<PathBuf> = original_paths
+        .iter()
+        .filter(|x| !new_file_paths.contains(x))
+        .cloned()
+        .collect();
+
+    for file in new_file_paths {
+        paths.insert(0, file)
+    }
+
     let total_paths = paths.len();
 
-    // Wrap hashes in Arc for shared access
     let file_metadata_from_db = Arc::new(file_metadata_from_db);
 
-    // Set the number of concurrent tasks
     let concurrency_limit: usize = config.number_of_threads as usize;
     let semaphore = Arc::new(Semaphore::new(concurrency_limit));
 
@@ -181,36 +190,4 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
         }
     }
     Ok(file_paths)
-}
-
-pub async fn upload_file(
-    data: Result<PathData, core::fmt::Error>,
-    client: &Client,
-    path_str: &str,
-    shared_state: Arc<Mutex<SharedState>>,
-) {
-    if let Ok(data) = data {
-        match data.upload(client).await {
-            Ok(response) => {
-                if response.status() == 201 {
-                    shared_state
-                        .lock()
-                        .unwrap()
-                        .append_to_processed_files((UploadStatus::Success, path_str.to_string()));
-                } else {
-                    shared_state
-                        .lock()
-                        .unwrap()
-                        .append_to_processed_files((UploadStatus::Failed(response.status().as_u16()), path_str.to_string()));
-                }
-            }
-            Err(error) => {
-                shared_state
-                    .lock()
-                    .unwrap()
-                    .append_to_processed_files((UploadStatus::Failed(error.status().unwrap().as_u16()), path_str.to_string()));
-            }
-        };
-        shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
-    }
 }
