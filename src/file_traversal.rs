@@ -2,36 +2,47 @@ use std::fs::{read_dir};
 use std::{io};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use colored::Colorize;
+use std::sync::{Arc, Mutex};
 use reqwest::{Client};
 use tokio::sync::{Semaphore};
 use tokio::task;
 use crate::config::Config;
-use crate::file_utils;
-use crate::file_utils::{compute_hash_of_partial_file, FileExtension, get_file_buffer, get_file_size};
+use crate::{file_utils, SharedState};
+use crate::file_extension::FileExtension;
+use crate::file_utils::{compute_hash_of_partial_file, get_file_buffer, get_file_size, upload_file};
 use crate::path_data::PathData;
+use crate::upload_status::UploadStatus;
 
 pub(crate) async fn iterate_over_files_and_upload(
     path: &str,
     file_metadata_from_db: HashMap<u64, Vec<String>>,
     client: Arc<Client>,
     config: Config,
+    shared_state: &Arc<Mutex<SharedState>>,
+    new_file_paths: Vec<PathBuf>
 ) {
     let root = path;
-    let paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
+    let original_paths = get_files_in_directory(path).unwrap_or_else(|_| vec![]);
+    let mut paths: Vec<PathBuf> = original_paths
+        .iter()
+        .filter(|x| !new_file_paths.contains(x))
+        .cloned()
+        .collect();
+
+    for file in new_file_paths {
+        paths.insert(0, file)
+    }
+
     let total_paths = paths.len();
 
-    // Wrap hashes in Arc for shared access
     let file_metadata_from_db = Arc::new(file_metadata_from_db);
 
-    // Set the number of concurrent tasks
     let concurrency_limit: usize = config.number_of_threads as usize;
     let semaphore = Arc::new(Semaphore::new(concurrency_limit));
 
     let mut tasks = Vec::new();
-    let counter = Arc::new(AtomicUsize::new(1));
+
+    shared_state.lock().unwrap().set_initial_remaining_files((total_paths) as i32);
 
     for path in paths.into_iter() {
         let acceptable_users = config.accepted_users.clone();
@@ -39,11 +50,10 @@ pub(crate) async fn iterate_over_files_and_upload(
         let file_metadata_from_db = file_metadata_from_db.clone();
         let root = root.to_string();
         let semaphore = semaphore.clone();
-        let counter = counter.clone();
+        let shared_clone = shared_state.clone();
 
         let task = task::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
-            let completed = counter.fetch_add(1, Ordering::SeqCst);
 
             let file_size = match get_file_size(&path) {
                 Ok(size) => size,
@@ -66,11 +76,12 @@ pub(crate) async fn iterate_over_files_and_upload(
             if !file_metadata_from_db.contains_key(&file_size) {
                 match file_utils::check_file_integrity(&path) {
                     true => {
+                        shared_clone.lock().unwrap().append_to_currently_uploading(path.to_str().unwrap().to_string());
                         let data = read_file(path_str, &root, &acceptable_users);
-                        upload_file(data, &client, &completed, total_paths, path_str).await
+                        upload_file(data, &client, path_str, shared_clone).await;
                     }
                     false => {
-                        println!("\t{}/{}:\t Failed  \t {}\t {}", completed, total_paths, path_str, "Corrupt file".red())
+                        shared_clone.lock().unwrap().append_to_processed_files((UploadStatus::Corrupt, path.to_str().unwrap().to_string()));
                     }
                 }
             } else {
@@ -86,14 +97,17 @@ pub(crate) async fn iterate_over_files_and_upload(
                     match file_utils::check_file_integrity(&path) {
                         true => {
                             let data = read_file(path_str, &root, &acceptable_users);
-                            upload_file(data, &client, &completed, total_paths, path_str).await
+                            upload_file(data, &client, path_str, shared_clone).await
                         }
                         false => {
-                            println!("\t{:?}/{}:\t Failed  \t {}\t {}", counter, total_paths, path_str, "Corrupt file".red())
+                            shared_clone.lock().unwrap().append_to_processed_files((UploadStatus::Corrupt, path.to_str().unwrap().to_string()));
                         }
                     }
                 } else {
-                    println!("\t{:?}/{}:\t Skipping\t {}", counter, total_paths, path_str);
+                    shared_clone
+                        .lock()
+                        .unwrap()
+                        .append_to_processed_files((UploadStatus::Skipped, path.to_str().unwrap().to_string()));
                 }
             }
         });
@@ -176,28 +190,4 @@ pub fn get_files_in_directory(path: &str) -> io::Result<Vec<PathBuf>> {
         }
     }
     Ok(file_paths)
-}
-
-pub async fn upload_file(
-    data: Result<PathData, core::fmt::Error>,
-    client: &Client,
-    index: &usize,
-    total_paths: usize,
-    path_str: &str,
-) {
-    if let Ok(data) = data {
-        println!("\t{:?}/{}:\t Uploading\t {}", index, total_paths, path_str);
-        match data.upload(client).await {
-            Ok(response) => {
-                if response.status() == 201 {
-                    println!("\t{:?}/{}:\t Uploaded\t {}", index, total_paths, path_str.green());
-                } else {
-                    println!("\t{:?}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, response.status().as_str().red())
-                }
-            }
-            Err(error) => {
-                println!("\t{:?}/{}:\t Failed  \t {}\t Response {}", index, total_paths, path_str, error.to_string().red())
-            }
-        };
-    }
 }

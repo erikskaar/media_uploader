@@ -1,9 +1,16 @@
 use std::fs::File;
-use std::io;
+use std::{io, process};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use crate::file_utils::FileExtension::{Avi, Mov, Mp4, Mpeg, Ogv, Unknown, Webm, Wmv};
+use std::sync::{Arc, Mutex};
+use crossterm::style::Stylize;
+use reqwest::Client;
+use crate::path_data::PathData;
+use crate::shared_state::SharedState;
+use crate::tree_node;
+use crate::tree_node::find_unique_files_in_directory;
+use crate::upload_status::UploadStatus;
 
 pub fn compute_md5_hash(buffer: &Vec<u8>) -> io::Result<String> {
     let digest = md5::compute(buffer);
@@ -53,76 +60,76 @@ pub fn check_file_integrity(path: &PathBuf) -> bool {
     output.status.success()
 }
 
-#[derive(Debug, PartialEq)]
-pub enum FileExtension {
-    Mp4,
-    Avi,
-    Mpeg,
-    Ogv,
-    Webm,
-    Mov,
-    Wmv,
-    Unknown,
-}
-
-impl FileExtension {
-    pub fn from(path: &Path) -> FileExtension {
-        let extension_str = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-
-        if extension_str.eq_ignore_ascii_case("mp4") {
-            Mp4
-        } else if extension_str.eq_ignore_ascii_case("avi") {
-            Avi
-        } else if extension_str.eq_ignore_ascii_case("mpeg") {
-            Mpeg
-        } else if extension_str.eq_ignore_ascii_case("ogv") {
-            Ogv
-        } else if extension_str.eq_ignore_ascii_case("webm") {
-            Webm
-        } else if extension_str.eq_ignore_ascii_case("mov") {
-            Mov
-        } else if extension_str.eq_ignore_ascii_case("wmv") {
-            Wmv
-        } else {
-            Unknown
-        }
-    }
-
-    pub fn mime_type<'a>(&self) -> &'a str {
-        match self {
-            Mp4 => "video/mp4",
-            Avi => "video/x-msvideo",
-            Mpeg => "video/mpeg",
-            Ogv => "video/ogg",
-            Webm => "video/webm",
-            Mov => "video/quicktime",
-            Wmv => "video/x-ms-wmv",
-            Unknown => ""
-        }
+pub async fn upload_file(
+    data: Result<PathData, core::fmt::Error>,
+    client: &Client,
+    path_str: &str,
+    shared_state: Arc<Mutex<SharedState>>,
+) {
+    if let Ok(data) = data {
+        match data.upload(client).await {
+            Ok(response) => {
+                if response.status() == 201 {
+                    shared_state
+                        .lock()
+                        .unwrap()
+                        .append_to_processed_files((UploadStatus::Success, path_str.to_string()));
+                } else {
+                    shared_state
+                        .lock()
+                        .unwrap()
+                        .append_to_processed_files((UploadStatus::Failed(response.status().as_u16()), path_str.to_string()));
+                }
+            }
+            Err(error) => {
+                shared_state
+                    .lock()
+                    .unwrap()
+                    .append_to_processed_files((UploadStatus::Failed(error.status().unwrap().as_u16()), path_str.to_string()));
+            }
+        };
+        shared_state.lock().unwrap().remove_from_currently_uploading(path_str.to_string());
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub fn get_newest_files(root_folder: &str) -> Vec<PathBuf> {
+    match tree_node::load_tree_from_file("tree.json") {
+        Ok(old_node) => {
+            let new_node = tree_node::get_files_in_directory(root_folder);
+            let new_node = match new_node {
+                Ok(node) => node,
+                Err(_) => {
+                    eprintln!("Root folder is not a directory.");
+                    process::exit(1)
+                }
+            };
+            let extra_files: Vec<PathBuf> = find_unique_files_in_directory(&new_node, &old_node)
+                .iter()
+                .map(|x| x.path.clone())
+                .collect();
+            println!("{}", format!("Found {} new file(s) since last run!", extra_files.len()).green());
 
-    #[test]
-    fn test_valid_extension() {
-        let path = Path::new("video.mP4");
-        assert_eq!(FileExtension::from(path), Mp4);
-    }
-
-    #[test]
-    fn test_unknown_extension() {
-        let path = Path::new("file.xyz");
-        assert_eq!(FileExtension::from(path), Unknown);
-    }
-
-    #[test]
-    fn test_no_extension() {
-        let path = Path::new("video.");
-        assert_eq!(FileExtension::from(path), Unknown);
+            match tree_node::save_tree_to_file(&new_node, "tree.json") {
+                Ok(_) => println!("Saved tree to file."),
+                Err(_) => println!("Could not save tree to file")
+            };
+            extra_files
+        },
+        Err(_) => {
+            println!("No previous run detected.");
+            let new_node = tree_node::get_files_in_directory(root_folder);
+            let new_node = match new_node {
+                Ok(node) => node,
+                Err(_) => {
+                    eprintln!("Root folder is not a directory.");
+                    process::exit(1)
+                }
+            };
+            match tree_node::save_tree_to_file(&new_node, "tree.json") {
+                Ok(_) => println!("Saved tree to file."),
+                Err(_) => println!("Could not save tree to file")
+            };
+            Vec::new()
+        }
     }
 }
