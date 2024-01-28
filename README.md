@@ -1,6 +1,6 @@
 # Media_uploader
 
-This program lets you sync your media directory, like a NAS, with MediaCMS without having to painstakingly check for
+Media_uploader lets you sync your media directory, like a NAS, with MediaCMS without having to painstakingly check for
 duplicates.
 
 ## Features
